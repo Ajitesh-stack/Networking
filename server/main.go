@@ -6,13 +6,36 @@ import (
 	"io"
 	"log"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
+
+	"spatial-ingestion-server/cache"
+	"spatial-ingestion-server/metrics"
+	"spatial-ingestion-server/routing"
 )
 
-var activeConnections int64
+var (
+	activeConnections int64
+	globalCache       *cache.ShardedCache
+	globalGraph       *routing.Graph
+	globalMetrics     *metrics.SystemMetrics
+)
 
 func main() {
+	// Initialize metrics tracking
+	globalMetrics = metrics.NewSystemMetrics()
+	globalMetrics.StartReporting(2 * time.Second) // Report metrics every 2 seconds
+	log.Println("Internal Instrumentation Collector started (Reporting interval: 2s)")
+
+	// Instantiate the global ShardedCache (16 shards, capacity 100 per shard)
+	globalCache = cache.NewShardedCache(16, 100)
+	log.Println("Global Sharded LRU Cache initialized (16 shards, capacity 100 per shard)")
+
+	// Instantiate the static network topology graph (Read-Only under concurrency)
+	globalGraph = routing.GetTestTopology()
+	log.Println("Global Network Topology initialized (Nodes A to E)")
+
 	listener, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		log.Fatalf("Failed to listen on port 8080: %v", err)
@@ -37,7 +60,8 @@ func main() {
 	}
 }
 
-// handleConnection handles a single client connection, enforcing an idle read timeout.
+// handleConnection handles a single client connection, enforcing an idle read timeout,
+// evaluating dynamic routing cost, injecting weather-induced latency, and cache logging.
 func handleConnection(conn net.Conn) {
 	defer func() {
 		count := atomic.AddInt64(&activeConnections, -1)
@@ -68,6 +92,89 @@ func handleConnection(conn net.Conn) {
 			break
 		}
 
+		// Track packet processing
+		globalMetrics.IncrementPackets()
+
 		log.Printf("[%s] Received packet: %q", conn.RemoteAddr().String(), line)
+
+		// Extract client ID and weather attributes
+		clientID, okClient := extractClientID(line)
+		weather, okWeather := extractWeather(line)
+
+		if okClient && okWeather {
+			// Compute shortest path and dynamic weight metrics locally (No global graph mutations)
+			path, cost, latencySleep := globalGraph.FindShortestPath("A", "E", weather)
+			log.Printf("[%s] Dijkstra path resolved for weather %q: %v with total cost %.2f", conn.RemoteAddr().String(), weather, path, cost)
+
+			// Simulate environmental transmission delay if required
+			if latencySleep > 0 {
+				scaledSleep := latencySleep / 100
+				log.Printf("[%s] Simulating adversarial link degradation: sleeping for %v (%q weather)", conn.RemoteAddr().String(), scaledSleep, weather)
+				time.Sleep(scaledSleep)
+				globalMetrics.AddInjectedLatency(latencySleep)
+			}
+
+			// Perform Cache operations
+			globalCache.Set(clientID, line)
+			log.Printf("[%s] Cache WRITE for key %q", conn.RemoteAddr().String(), clientID)
+
+			if val, found := globalCache.Get(clientID); found {
+				globalMetrics.IncrementCacheHits()
+				log.Printf("[%s] Cache READ hit for key %q: %q", conn.RemoteAddr().String(), clientID, val.(string))
+			} else {
+				globalMetrics.IncrementCacheMisses()
+				log.Printf("[%s] Cache READ miss for key %q", conn.RemoteAddr().String(), clientID)
+			}
+		} else {
+			log.Printf("[%s] Failed to parse telemetry packet parameters: %q", conn.RemoteAddr().String(), line)
+		}
 	}
+}
+
+// extractClientID retrieves the value of the "client=" parameter in the telemetry packet.
+func extractClientID(packet string) (string, bool) {
+	const prefix = "client="
+	idx := strings.Index(packet, prefix)
+	if idx == -1 {
+		return "", false
+	}
+	start := idx + len(prefix)
+
+	end := strings.Index(packet[start:], ",")
+	if end == -1 {
+		end = strings.Index(packet[start:], "\n")
+		if end == -1 {
+			end = len(packet[start:])
+		}
+	}
+
+	clientID := strings.TrimSpace(packet[start : start+end])
+	if clientID == "" {
+		return "", false
+	}
+	return clientID, true
+}
+
+// extractWeather retrieves the value of the "weather=" parameter in the telemetry packet.
+func extractWeather(packet string) (string, bool) {
+	const prefix = "weather="
+	idx := strings.Index(packet, prefix)
+	if idx == -1 {
+		return "", false
+	}
+	start := idx + len(prefix)
+
+	end := strings.Index(packet[start:], ",")
+	if end == -1 {
+		end = strings.Index(packet[start:], "\n")
+		if end == -1 {
+			end = len(packet[start:])
+		}
+	}
+
+	weather := strings.TrimSpace(packet[start : start+end])
+	if weather == "" {
+		return "", false
+	}
+	return weather, true
 }
