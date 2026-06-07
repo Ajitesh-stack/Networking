@@ -7,8 +7,6 @@ LICENSE
 README.md
 
 # Local build artifacts
-server
-generator
 server.exe
 generator.exe
 coverage.out
