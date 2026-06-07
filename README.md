@@ -130,6 +130,11 @@ The following benchmark metrics reflect the ingestion of the full **Bangalore Mo
 | **Total Processing Time** | ~78 seconds |
 | **Effective Ingestion Throughput** | ~991 packets/sec |
 
+### Ingestion Scaling Benchmark
+Below is an empirical analysis of telemetry ingestion throughput relative to concurrent TCP client workers. Throughput scales linearly under low worker counts and levels off near 8 concurrent workers due to cache shard mutex lock acquisition and network device limits:
+
+![Ingestion Throughput Scaling Chart](throughput_scaling_chart.png)
+
 ---
 
 ## 🛠️ Installation & Quick Start
