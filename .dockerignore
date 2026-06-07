@@ -1,0 +1,27 @@
+# Version control
+.git
+.github
+.gitignore
+.dockerignore
+LICENSE
+README.md
+
+# Local build artifacts
+server
+generator
+server.exe
+generator.exe
+coverage.out
+*.log
+
+# Editor configurations
+.idea/
+.vscode/
+*.suo
+*.sln
+
+# Document placeholders
+doc.go
+walkthrough.md
+implementation_plan.md
+task.md

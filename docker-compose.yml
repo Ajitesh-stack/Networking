@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spatial-ingestion-server:latest
+    container_name: ingestion-server
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spatial-ingestion-server:latest
+    container_name: telemetry-generator
+    # Connects to the server service inside the docker network and streams the train dataset
+    command: ["/app/generator", "-server", "server:8080", "-data", "generator/data/train.csv"]
+    depends_on:
+      - server

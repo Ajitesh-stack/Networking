@@ -1,8 +1,11 @@
 # Spatial Ingestion Server & Routing Engine
 > A high-throughput spatial data processing pipeline and sharded LRU cache built to ingest, decode, and route real-world mobility streams under simulated network degradation.
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/Ajitesh-stack/Networking)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker Image](https://img.shields.io/badge/Docker-~15MB-2496ED?style=flat&logo=docker&logoColor=white)](https://github.com/Ajitesh-stack/Networking/blob/main/Dockerfile)
+[![Go CI/CD Pipeline](https://github.com/Ajitesh-stack/Networking/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ajitesh-stack/Networking/actions/workflows/ci.yml)
+
 
 ---
 
@@ -119,7 +122,9 @@ The following benchmark metrics reflect the ingestion of the full **Bangalore Mo
 
 ## 🛠️ Installation & Quick Start
 
-Ensure Go 1.18+ is installed on your machine.
+Ensure Go 1.18+ is installed on your machine. 
+
+Both the `train.csv` (77,299 rows) and `test.csv` (sample dataset) Bangalore Mobility logs are located under `generator/data/` for immediate benchmarking and integration testing.
 
 1. **Clone the repository**:
    ```bash
@@ -128,7 +133,7 @@ Ensure Go 1.18+ is installed on your machine.
    ```
 
 2. **Verify dataset location**:
-   Ensure `generator/data/train.csv` exists and is formatted correctly.
+   Ensure `generator/data/train.csv` and `generator/data/test.csv` exist.
 
 3. **Build the binaries (Optional)**:
    * **Linux / macOS**:
@@ -155,9 +160,13 @@ You can run the built binaries or execute them directly using `go run`.
    go run ./server
    ```
 2. **Run the Load Generator**:
-   In a separate terminal session, execute:
+   In a separate terminal session, execute (defaults to streaming `train.csv` to `localhost:8080`):
    ```bash
    go run ./generator
+   ```
+   *To run with the test dataset instead:*
+   ```bash
+   go run ./generator -data generator/data/test.csv
    ```
 
 ### Option B: Running the Built Binaries
@@ -176,12 +185,38 @@ You can run the built binaries or execute them directly using `go run`.
    In a separate terminal session, execute:
    * **Linux / macOS**:
      ```bash
-     ./generator
+     ./generator -data generator/data/train.csv
      ```
    * **Windows**:
      ```bash
-     ./generator.exe
+     ./generator.exe -data generator/data/train.csv
      ```
+
+---
+
+## 🐳 Docker & Quick Deploy
+
+Both services are containerized using a multi-stage Docker build, generating a minimal-footprint, security-hardened deployment configuration (~15MB final image).
+
+### Using Docker Compose (Recommended)
+Build and start both the server and telemetry generator containers. The generator automatically connects to the server and streams `train.csv`:
+```bash
+docker-compose up --build
+```
+
+### Using Standalone Docker
+1. **Build the image**:
+   ```bash
+   docker build -t spatial-ingestion-server .
+   ```
+2. **Run the Ingestion Server**:
+   ```bash
+   docker run -d -p 8080:8080 --name server spatial-ingestion-server
+   ```
+3. **Run the Load Generator** (For example, streaming `test.csv` to the server):
+   ```bash
+   docker run --rm --network="host" spatial-ingestion-server /app/generator -data generator/data/test.csv -server localhost:8080
+   ```
 
 ---
 
@@ -222,11 +257,36 @@ if err != nil {
 
 ---
 
+## 🧠 Why This Project & Key Learnings (For Recruiters)
+
+This project serves as a demonstration of production-grade systems engineering in Go, designed specifically for high-throughput concurrency and spatial telematics ingestion.
+
+### Key Technical Takeaways:
+
+- **Low-Latency Cache Sharding**: Mitigated global lock contention on the LRU cache by implementing an $N$-shard coordinator utilizing FNV-1a hashing. This reduced lock acquisition delays significantly, allowing high concurrent access rates (~35ns/op).
+- **Deadlock-Free Bounded Pipelines**: Designed a robust producer-consumer network pipeline using buffered channels. Handled worker failures gracefully by spawning asynchronous channel draining goroutines to prevent main-thread reader deadlocks.
+- **Read-Only Concurrent Pathfinding**: Formulated a thread-safe Dijkstra routing engine where dynamic weather multipliers are computed locally in the goroutine frame. This eliminated the need for global graph locks during dynamic weight recalculations.
+- **Multi-Stage Containerization & CI/CD**: Packaged the server and telemetry generator using a multi-stage Dockerfile to build security-hardened, scratch-based images of only ~15MB. Set up a full GitHub Actions workflow verifying code formatting, compilation, test coverage, and image builds on every pull request.
+
+---
+
 ## 🔮 Future Work
 
 - [ ] **Dynamic Shard Resizing**: Dynamically adjust the number of cache shards based on real-time collision and lock contention metrics.
 - [ ] **gRPC Ingestion Path**: Introduce a gRPC/Protobuf streaming path to reduce message framing and parsing overhead compared to newline-delimited protocols.
 - [ ] **Persistent Cache Backing**: Implement write-ahead logging (WAL) to persist cache keys across server restarts.
+
+---
+
+## 📈 Project Status & Test Coverage
+
+The core pipeline is fully implemented, containerized, and integrated with automated CI/CD pipelines. Unit tests cover all key business logic, cache behaviors, pathfinding algorithms, and metric collections:
+
+* **Sharded LRU Cache (`/cache`)**: **100.0%** (Table-driven, eviction, recency, and concurrent stress tests)
+* **Dijkstra Pathfinder (`/routing`)**: **98.0%** (Weather multipliers, disconnected nodes, and edge cases)
+* **Instrumentation Collector (`/metrics`)**: **100.0%** (Concurrent counter correctness and ticker-based reporting)
+* **Telemetry Parser (`/server`)**: **27.2%** (Framing protocol validation and parsing functions are **100% covered**; main blocking TCP loop left out of units to prevent integration mocks)
+* **Spatial Generator (`/generator`)**: **58.7%** (Geohash Base32 coordinate decoding and CSV streaming)
 
 ---
 

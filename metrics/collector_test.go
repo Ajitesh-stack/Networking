@@ -73,3 +73,27 @@ func TestSystemMetricsConcurrency(t *testing.T) {
 		t.Errorf("expected %dms latency, got %d", expectedCount*2, m.TotalInjectedLatencyMs)
 	}
 }
+
+// TestSystemMetricsReporting verifies the background reporting loop executes without panicking.
+func TestSystemMetricsReporting(t *testing.T) {
+	m := NewSystemMetrics()
+	m.IncrementPackets()
+	m.IncrementCacheHits()
+	m.IncrementCacheMisses()
+	m.AddInjectedLatency(10 * time.Millisecond)
+
+	// Start reporting loop with a small interval
+	m.StartReporting(20 * time.Millisecond)
+
+	// Wait for ticker to fire at least once
+	time.Sleep(50 * time.Millisecond)
+}
+
+// TestSystemMetricsZeroReadsReporting verifies the reporting loop with zero cache reads.
+func TestSystemMetricsZeroReadsReporting(t *testing.T) {
+	m := NewSystemMetrics()
+	// Total cache hits and misses are 0, which makes totalReads = 0.
+	m.StartReporting(20 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+}
+

@@ -59,9 +59,22 @@ func runWorker(workerID int, serverAddr string, packetChan <-chan PacketJob, wg 
 	defer wg.Done()
 
 	log.Printf("[Worker %d] Connecting to server on %s...", workerID, serverAddr)
-	conn, err := net.Dial("tcp", serverAddr)
+	var conn net.Conn
+	var err error
+	maxRetries := 5
+	for retry := 1; retry <= maxRetries; retry++ {
+		conn, err = net.Dial("tcp", serverAddr)
+		if err == nil {
+			break
+		}
+		log.Printf("[Worker %d] Connection failed (attempt %d/%d): %v", workerID, retry, maxRetries, err)
+		if retry < maxRetries {
+			time.Sleep(1 * time.Second)
+		}
+	}
+
 	if err != nil {
-		log.Printf("[Worker %d] Connection failed: %v", workerID, err)
+		log.Printf("[Worker %d] Connection failed after %d attempts: %v", workerID, maxRetries, err)
 		// Drain the channel in background to prevent deadlock of the main thread reader
 		go func() {
 			for range packetChan {}
