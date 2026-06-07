@@ -1,7 +1,7 @@
 # Spatial Ingestion Server & Routing Engine
 > A high-throughput spatial data processing pipeline and sharded LRU cache built to ingest, decode, and route real-world mobility streams under simulated network degradation.
 
-[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Image](https://img.shields.io/badge/Docker-~15MB-2496ED?style=flat&logo=docker&logoColor=white)](https://github.com/Ajitesh-stack/Networking/blob/main/Dockerfile)
 [![Go CI/CD Pipeline](https://github.com/Ajitesh-stack/Networking/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ajitesh-stack/Networking/actions/workflows/ci.yml)
@@ -15,7 +15,7 @@ This repository implements a concurrent, zero-dependency Go service designed to 
 
 ## 🛠️ Technology Stack
 
-* **Programming Language**: Go (Golang) v1.26 (Standard Library only, zero external dependencies)
+* **Programming Language**: Go (Golang) v1.24 (Standard Library only, zero external dependencies)
 * **Concurrency Model**: Multi-threaded goroutine workers, bounded job queues (`chan`), and low-overhead synchronization (`sync.WaitGroup`, `sync.RWMutex`, `sync/atomic`)
 * **Network & Ingest**: Raw TCP socket server (`net.Listener`, `net.Conn`) with custom line-delimited message framing and persistent connections
 * **Spatial Systems**: Zero-dependency Base32 Geohash decoder for coordinate mapping

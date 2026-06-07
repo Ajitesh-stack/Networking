@@ -14,7 +14,7 @@ Please be respectful and professional in all communications and code reviews. We
    git clone https://github.com/Ajitesh-stack/Networking.git
    cd Networking
    ```
-3. **Set Up Go**: Make sure Go 1.18+ (preferably Go 1.26+) is installed.
+3. **Set Up Go**: Make sure Go 1.18+ (preferably Go 1.24+) is installed.
 
 ## Development Workflow
 
