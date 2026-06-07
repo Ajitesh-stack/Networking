@@ -18,6 +18,6 @@ services:
     image: spatial-ingestion-server:latest
     container_name: telemetry-generator
     # Connects to the server service inside the docker network and streams the train dataset
-    command: ["/app/generator", "-server", "server:8080", "-data", "generator/data/train.csv"]
+    command: ["generator", "-server", "server:8080", "-data", "generator/data/train.csv"]
     depends_on:
       - server

@@ -232,7 +232,7 @@ docker-compose up --build
    ```
 3. **Run the Load Generator** (For example, streaming `test.csv` to the server):
    ```bash
-   docker run --rm --network="host" spatial-ingestion-server /app/generator -data generator/data/test.csv -server localhost:8080
+   docker run --rm --network="host" spatial-ingestion-server generator -data generator/data/test.csv -server localhost:8080
    ```
 
 ---

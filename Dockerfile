@@ -20,13 +20,13 @@ FROM alpine:latest
 WORKDIR /app
 
 # Copy compiled binaries from builder stage
-COPY --from=builder /bin/server /app/server
-COPY --from=builder /bin/generator /app/generator
+COPY --from=builder /bin/server /usr/local/bin/server
+COPY --from=builder /bin/generator /usr/local/bin/generator
 
 # Copy mobility dataset files (train.csv and test.csv)
 COPY --from=builder /src/generator/data /app/generator/data
 
 # Default to running the ingestion server. 
 # To run the generator instead, simply override the CMD when running:
-# "docker run spatial-ingestion-server /app/generator"
-CMD ["/app/server"]
+# "docker run spatial-ingestion-server generator"
+CMD ["server"]
