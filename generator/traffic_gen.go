@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -21,20 +22,26 @@ type PacketJob struct {
 }
 
 func main() {
+	var dataPath string
+	flag.StringVar(&dataPath, "data", "generator/data/train.csv", "Path to raw mobility CSV dataset (e.g. generator/data/train.csv or generator/data/test.csv)")
+	var serverAddr string
+	flag.StringVar(&serverAddr, "server", "localhost:8080", "Server endpoint address (host:port)")
+	flag.Parse()
+
 	numWorkers := 3
 	packetChan := make(chan PacketJob, 100)
 	var wg sync.WaitGroup
 
-	log.Printf("Starting concurrent CSV spatial data streaming with %d workers...", numWorkers)
+	log.Printf("Starting concurrent CSV spatial data streaming with %d workers from %s...", numWorkers, dataPath)
 
 	// Spawn the 3 client worker goroutines
 	for i := 1; i <= numWorkers; i++ {
 		wg.Add(1)
-		go runWorker(i, packetChan, &wg)
+		go runWorker(i, serverAddr, packetChan, &wg)
 	}
 
 	// Read raw spatial dataset file once and feed the channel
-	err := streamDataset("generator/data/train.csv", packetChan)
+	err := streamDataset(dataPath, packetChan)
 	if err != nil {
 		log.Printf("Fatal error streaming dataset: %v", err)
 	}
@@ -48,11 +55,11 @@ func main() {
 }
 
 // runWorker maintains a persistent TCP connection to the server and consumes/pipes jobs from the channel.
-func runWorker(workerID int, packetChan <-chan PacketJob, wg *sync.WaitGroup) {
+func runWorker(workerID int, serverAddr string, packetChan <-chan PacketJob, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	log.Printf("[Worker %d] Connecting to server on localhost:8080...", workerID)
-	conn, err := net.Dial("tcp", "localhost:8080")
+	log.Printf("[Worker %d] Connecting to server on %s...", workerID, serverAddr)
+	conn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
 		log.Printf("[Worker %d] Connection failed: %v", workerID, err)
 		// Drain the channel in background to prevent deadlock of the main thread reader

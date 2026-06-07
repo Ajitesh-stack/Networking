@@ -1,6 +1,9 @@
 # Spatial Ingestion Server & Routing Engine
 > A high-throughput spatial data processing pipeline and sharded LRU cache built to ingest, decode, and route real-world mobility streams under simulated network degradation.
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Ajitesh-stack/Networking)](https://golang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ---
 
 This repository implements a concurrent, zero-dependency Go service designed to parse, ingest, cache, and route spatial telemetry packets at scale. The system is validated using the Bangalore Mobility dataset (`train.csv`), streaming over 77,000 spatial records concurrently with zero lock contention or data loss.
@@ -53,6 +56,51 @@ The system consists of two primary components: a multi-connection raw TCP load g
 
 ---
 
+## 🧪 Testing and Benchmarks
+
+The project is thoroughly tested using Go's standard library testing tools, achieving a high statement coverage (>80% on core library logic in `/cache`, `/routing`, and `/metrics` packages).
+
+### Running Unit Tests
+
+To execute all unit tests in the repository and print output logs:
+```bash
+make test
+```
+*Alternatively, run: `go test -v -cover -coverprofile="coverage.out" ./...`*
+
+#### Example Output:
+```text
+=== RUN   TestLRUCacheBasic
+--- PASS: TestLRUCacheBasic (0.00s)
+=== RUN   TestLRUUpdateRecency
+--- PASS: TestLRUUpdateRecency (0.00s)
+=== RUN   TestShardingCorrectness
+--- PASS: TestShardingCorrectness (0.00s)
+=== RUN   TestShardedCacheConcurrency
+--- PASS: TestShardedCacheConcurrency (0.01s)
+PASS
+ok  	github.com/Ajitesh-stack/spatial-ingestion-server/cache	1.240s	coverage: 100.0% of statements
+```
+
+### Running Performance Benchmarks
+
+To benchmark the concurrent sharded LRU cache and Dijkstra pathfinder under high thread contention:
+```bash
+make bench
+```
+*Alternatively, run: `go test -bench="." -benchmem ./...`*
+
+#### Example Output:
+```text
+goos: windows
+goarch: amd64
+pkg: github.com/Ajitesh-stack/spatial-ingestion-server/cache
+BenchmarkShardedCacheGet-16    	34257133	        35.47 ns/op	      13 B/op	       1 allocs/op
+BenchmarkShardedCacheSet-16    	36207067	        34.75 ns/op	      13 B/op	       1 allocs/op
+```
+
+---
+
 ## 📊 Performance Results
 
 The following benchmark metrics reflect the ingestion of the full **Bangalore Mobility dataset** under the accelerated load configuration (which scales down simulated physical delays 100x while maintaining metrics accounting in milliseconds):
@@ -75,35 +123,65 @@ Ensure Go 1.18+ is installed on your machine.
 
 1. **Clone the repository**:
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/Ajitesh-stack/Networking
    cd Networking
    ```
 
 2. **Verify dataset location**:
    Ensure `generator/data/train.csv` exists and is formatted correctly.
 
-3. **Build the binaries**:
-   ```bash
-   go build -o server.exe ./server
-   go build -o generator.exe ./generator
-   ```
+3. **Build the binaries (Optional)**:
+   * **Linux / macOS**:
+     ```bash
+     go build -o server ./server
+     go build -o generator ./generator
+     ```
+   * **Windows**:
+     ```bash
+     go build -o server.exe ./server
+     go build -o generator.exe ./generator
+     ```
 
 ---
 
 ## 🚀 How to Run
 
+You can run the built binaries or execute them directly using `go run`.
+
+### Option A: Using `go run` (Recommended for quick start)
+
 1. **Start the Ingestion Server**:
    ```bash
-   ./server.exe
+   go run ./server
    ```
-   *The server starts listening on `:8080` and begins emitting instrumentation logs and metrics reports every 2 seconds.*
-
 2. **Run the Load Generator**:
    In a separate terminal session, execute:
    ```bash
-   ./generator.exe
+   go run ./generator
    ```
-   *The generator will parse the CSV dataset, spin up 3 concurrent workers, and stream telemetry until EOF is reached.*
+
+### Option B: Running the Built Binaries
+
+1. **Start the Ingestion Server**:
+   * **Linux / macOS**:
+     ```bash
+     ./server
+     ```
+   * **Windows**:
+     ```bash
+     ./server.exe
+     ```
+
+2. **Run the Load Generator**:
+   In a separate terminal session, execute:
+   * **Linux / macOS**:
+     ```bash
+     ./generator
+     ```
+   * **Windows**:
+     ```bash
+     ./generator.exe
+     ```
 
 ---
 
@@ -149,4 +227,8 @@ if err != nil {
 - [ ] **Dynamic Shard Resizing**: Dynamically adjust the number of cache shards based on real-time collision and lock contention metrics.
 - [ ] **gRPC Ingestion Path**: Introduce a gRPC/Protobuf streaming path to reduce message framing and parsing overhead compared to newline-delimited protocols.
 - [ ] **Persistent Cache Backing**: Implement write-ahead logging (WAL) to persist cache keys across server restarts.
-SS
+
+---
+
+## 🏷️ Topics
+`go`, `concurrency`, `networking`, `geohash`, `dijkstra`, `systems-design`

@@ -73,7 +73,8 @@ func (g *Graph) FindShortestPath(start, end string, weather string) ([]string, f
 		}
 	}
 
-	if dist[end] == math.MaxFloat64 {
+	endDist, exists := dist[end]
+	if !exists || endDist == math.MaxFloat64 {
 		return nil, math.MaxFloat64, 0
 	}
 

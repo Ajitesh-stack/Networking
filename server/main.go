@@ -6,13 +6,17 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
-	"spatial-ingestion-server/cache"
-	"spatial-ingestion-server/metrics"
-	"spatial-ingestion-server/routing"
+	"github.com/Ajitesh-stack/spatial-ingestion-server/cache"
+	"github.com/Ajitesh-stack/spatial-ingestion-server/metrics"
+	"github.com/Ajitesh-stack/spatial-ingestion-server/routing"
 )
 
 var (
@@ -40,15 +44,32 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to listen on port 8080: %v", err)
 	}
-	defer listener.Close()
+
+	var wg sync.WaitGroup
+	shutdownChan := make(chan struct{})
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		log.Println("Shutdown signal received. Shutting down server gracefully...")
+		close(shutdownChan)
+		listener.Close() // This unblocks listener.Accept() and causes it to return an error
+	}()
 
 	log.Println("Concurrent Ingestion Server is listening on TCP port 8080...")
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Failed to accept connection: %v", err)
-			continue
+			select {
+			case <-shutdownChan:
+				log.Println("Accept loop stopped. Waiting for active connections to finish...")
+				goto shutdown
+			default:
+				log.Printf("Failed to accept connection: %v", err)
+				continue
+			}
 		}
 
 		// Track new connection atomically
@@ -56,8 +77,16 @@ func main() {
 		log.Printf("Accepted connection from %s. Active connections: %d", conn.RemoteAddr().String(), count)
 
 		// Process connection concurrently using goroutines
-		go handleConnection(conn)
+		wg.Add(1)
+		go func(c net.Conn) {
+			defer wg.Done()
+			handleConnection(c)
+		}(conn)
 	}
+
+shutdown:
+	wg.Wait()
+	log.Println("Server gracefully stopped. All connection handlers finished.")
 }
 
 // handleConnection handles a single client connection, enforcing an idle read timeout,
