@@ -28,5 +28,5 @@ COPY --from=builder /src/generator/data /app/generator/data
 
 # Default to running the ingestion server. 
 # To run the generator instead, simply override the CMD when running:
-# "docker run <image> /app/generator"
+# "docker run spatial-ingestion-server /app/generator"
 CMD ["/app/server"]

@@ -13,6 +13,17 @@ This repository implements a concurrent, zero-dependency Go service designed to 
 
 ---
 
+## 🛠️ Technology Stack
+
+* **Programming Language**: Go (Golang) v1.26 (Standard Library only, zero external dependencies)
+* **Concurrency Model**: Multi-threaded goroutine workers, bounded job queues (`chan`), and low-overhead synchronization (`sync.WaitGroup`, `sync.RWMutex`, `sync/atomic`)
+* **Network & Ingest**: Raw TCP socket server (`net.Listener`, `net.Conn`) with custom line-delimited message framing and persistent connections
+* **Spatial Systems**: Zero-dependency Base32 Geohash decoder for coordinate mapping
+* **Routing Algorithms**: Dijkstra's shortest path resolver with context-aware adversarial link cost multipliers
+* **Infrastructure**: Multi-stage Docker packaging (~15MB final image), Docker Compose multi-service topology, GitHub Actions automated CI
+---
+
+
 ## ⚡ Key Features
 
 * **Zero-Dependency base32 Geohash Decoder**: Converts alphanumeric geohashes into high-precision floating-point coordinates dynamically without importing external dependencies.
@@ -28,33 +39,34 @@ The system consists of two primary components: a multi-connection raw TCP load g
 
 ### Pipeline Topology
 
-```
-[generator/data/train.csv]
-          │ (Single OS file descriptor)
-          ▼
-   [Dataset Reader] ──(Decode Geohash & Normalize)
-          │
-          ▼
-   [packetChan] (Bounded queue, capacity: 100)
-          │
-      ┌───┼───┐ (Load balancing)
-      ▼   ▼   ▼
-    [Worker Thread 1-3]
-      │   │   │ (Persistent TCP streams)
-      ▼   ▼   ▼
-   [TCP Port :8080]
-          │
-          ▼
-  [Server listener]
-          │ (Spawn goroutine per client)
-          ▼
- [Connection Handlers] (15s idle deadlines)
-    ├──► [FNV-1a Sharded LRU Cache] (16 Shards, exclusive locks)
-    └──► [Dijkstra Routing Engine] (Local path relaxation)
+```mermaid
+flowchart TD
+    subgraph Client [Telemetry Generator]
+        A[(train.csv)] -->|Single OS File Reader| B[Dataset Scanner]
+        B -->|Geohash Decode & Weather Map| C[packetChan Bounded Queue: 100]
+        C -->|Buffered Work Distribution| D1[TCP Worker 1]
+        C -->|Buffered Work Distribution| D2[TCP Worker 2]
+        C -->|Buffered Work Distribution| D3[TCP Worker 3]
+    end
+
+    subgraph Server [Ingestion Engine & Router]
+        D1 & D2 & D3 -->|Persistent TCP Connections| E[TCP Listener :8080]
+        E -->|Spawn Connection Handler Goroutines| F[Telemetry Handlers]
+        F -->|FNV-1a Hash Sharding| G[(16-Shard LRU Cache)]
+        F -->|Local Dynamic Multipliers| H[Dijkstra Routing Graph]
+    end
+
+    classDef clientStyle fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef serverStyle fill:#efebe9,stroke:#5d4037,stroke-width:2px;
+    classDef componentStyle fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    
+    class Client clientStyle;
+    class Server serverStyle;
+    class G,H componentStyle;
 ```
 
 * **Ingest Framing Protocol**: Custom newline-terminated frames:
-  `client=<geohash>,seq=<index>,lat=<latitude>,lon=<longitude>,weather=<clear/rain/fog>`
+  `client={geohash},seq={index},lat={latitude},lon={longitude},weather={weather_condition}`
 * **Server Resilience**: Each incoming connection is wrapped with a 15-second read deadline (`net.Conn.SetReadDeadline`) that is refreshed on every packet. This prevents orphaned goroutines from building up if client edge nodes drop connection abruptly.
 
 ---
