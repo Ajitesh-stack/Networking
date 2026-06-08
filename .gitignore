@@ -25,3 +25,7 @@
 *.sln
 *.sw?
 .DS_Store
+
+# WAL Runtime Logs
+wal.log
+wal.log.bak

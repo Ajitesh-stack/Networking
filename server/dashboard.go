@@ -15,7 +15,18 @@ var dashboardStartTime time.Time
 // StartDashboard starts a lightweight HTTP metrics dashboard on the given port.
 func StartDashboard(port string, m *metrics.SystemMetrics) {
 	dashboardStartTime = time.Now()
+	mux := newDashboardMux(m)
 
+	go func() {
+		log.Printf("[Dashboard] Listening on http://localhost%s", port)
+		if err := http.ListenAndServe(port, mux); err != nil {
+			log.Printf("[Dashboard] HTTP server failed: %v", err)
+		}
+	}()
+}
+
+// newDashboardMux returns the ServeMux populated with metrics endpoints for testing.
+func newDashboardMux(m *metrics.SystemMetrics) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// JSON endpoint returning raw metric values
@@ -27,14 +38,7 @@ func StartDashboard(port string, m *metrics.SystemMetrics) {
 		misses := atomic.LoadUint64(&m.CacheMisses)
 		latency := atomic.LoadUint64(&m.TotalInjectedLatencyMs)
 
-		hitRate := 0.0
-		totalReads := hits + misses
-		if totalReads > 0 {
-			hitRate = (float64(hits) / float64(totalReads)) * 100.0
-		}
-		// Round to 2 decimal places
-		hitRate = float64(int(hitRate*100+0.5)) / 100.0
-
+		hitRate := calcHitRate(hits, misses)
 		uptime := int64(time.Since(dashboardStartTime).Seconds())
 
 		response := map[string]interface{}{
@@ -57,12 +61,17 @@ func StartDashboard(port string, m *metrics.SystemMetrics) {
 		w.Write([]byte(htmlPage))
 	})
 
-	go func() {
-		log.Printf("[Dashboard] Listening on http://localhost%s", port)
-		if err := http.ListenAndServe(port, mux); err != nil {
-			log.Printf("[Dashboard] HTTP server failed: %v", err)
-		}
-	}()
+	return mux
+}
+
+// calcHitRate calculates the cache hit rate percentage rounded to 2 decimal places.
+func calcHitRate(hits, misses uint64) float64 {
+	totalReads := hits + misses
+	if totalReads == 0 {
+		return 0.0
+	}
+	hitRate := (float64(hits) / float64(totalReads)) * 100.0
+	return float64(int(hitRate*100+0.5)) / 100.0
 }
 
 const htmlPage = `<!DOCTYPE html>
