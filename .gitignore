@@ -4,8 +4,10 @@
 *.dll
 *.so
 *.dylib
-server
-generator
+/server
+!/server/
+/generator
+!/generator/
 
 # Test binaries
 *.test
