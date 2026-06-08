@@ -143,8 +143,8 @@ func streamDataset(filePath string, packetChan chan<- PacketJob) error {
 		}
 	}
 
-	if idxIndex == -1 || idxGeohash == -1 || idxDemand == -1 || idxWeather == -1 {
-		return fmt.Errorf("essential CSV columns (Index, geohash, demand, Weather) not found in header")
+	if idxIndex == -1 || idxGeohash == -1 || idxWeather == -1 {
+		return fmt.Errorf("essential CSV columns (Index, geohash, Weather) not found in header")
 	}
 
 	rowCount := 0
@@ -161,7 +161,6 @@ func streamDataset(filePath string, packetChan chan<- PacketJob) error {
 		// Extract variables
 		indexStr := record[idxIndex]
 		geohashStr := record[idxGeohash]
-		demandStr := record[idxDemand]
 		weatherRaw := strings.ToLower(strings.TrimSpace(record[idxWeather]))
 
 		// Decode geohash to get coordinates
@@ -177,10 +176,13 @@ func streamDataset(filePath string, packetChan chan<- PacketJob) error {
 			weather = "fog"
 		} //Sunny or empty defaults to "clear"
 
-		// Parse demand
-		demandVal, err := strconv.ParseFloat(demandStr, 64)
-		if err != nil {
-			demandVal = 0.0
+		// Parse demand (optional column)
+		demandVal := 0.0
+		if idxDemand != -1 {
+			demandStr := record[idxDemand]
+			if val, err := strconv.ParseFloat(demandStr, 64); err == nil {
+				demandVal = val
+			}
 		}
 
 		// Dynamic Traffic Pacing based on demand column (Accelerated 100x for benchmarking)

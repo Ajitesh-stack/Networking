@@ -123,11 +123,13 @@ The following benchmark metrics reflect the ingestion of the full **Bangalore Mo
 | Metric | Sequential Mode | Zipfian Mode |
 | :--- | :--- | :--- |
 | **Total Telemetry Packets Processed** | 77,299 | ~75,000 (10s duration) |
-| **LRU Cache Hit Rate** | 100.00% | 75% – 82% (~78.5% observed) |
+| **LRU Cache Hit Rate** | 100.00% | 75% – 82% (~78.5% observed)* |
 | **Effective Throughput** | ~991 rps | ~7,500 rps |
 | **p50 Latency** | — | < 1 µs |
 | **p95 Latency** | — | < 1 µs |
 | **p99 Latency** | — | ~525 µs |
+
+*\*Note: Zipfian benchmark mirror cache capacity is set to 25 slots/shard (400 total capacity) against 1,140 unique geohashes, representing ~35% working set coverage.*
 
 ### Ingestion Scaling Benchmark
 Below is an empirical analysis of telemetry ingestion throughput relative to concurrent TCP client workers. Throughput scales linearly under low worker counts and levels off near 8 concurrent workers due to cache shard mutex lock acquisition and network device limits:
@@ -281,6 +283,14 @@ Before any incoming telemetry packet is inserted into the sharded LRU cache, it 
 On server startup, the recovery function replays both wal.log.bak (previous rotation) and wal.log sequentially. Entries with CRC32 mismatches (indicating corruption from a mid-write crash) are skipped with a warning; truncated tail entries (partial writes at crash boundary) are handled by stopping replay at the first incomplete read. This ensures the cache is fully restored to its pre-crash state with zero data corruption on restart.
 
 WAL rotation triggers automatically when wal.log exceeds 50MB, renaming it to wal.log.bak and opening a fresh log — preventing unbounded disk growth.
+
+#### Unbounded WAL Recovery & Checkpointing (Interview Talking Point)
+**Recruiter Question:** *"If the server runs for months, the WAL will grow very large (even with rotation to .bak). Replaying millions of entries on startup would take too long. How would you solve this in production?"*
+**Answer**: In a production system, we prevent unbounded WAL replay recovery times by implementing **state checkpointing**. Periodically (e.g., every 5 minutes), the server takes a snapshot of the sharded LRU cache's state and serializes it to disk. Any WAL entries written *prior* to the snapshot are safe to delete. Upon recovery, the server loads the last snapshot and only replays the WAL entries written *after* the checkpoint timestamp. This keeps startup recovery time bounded to under a few seconds.
+
+#### Dijkstra Graph Scale & Thread-Safety Design (Interview Talking Point)
+**Recruiter Question:** *"Your Dijkstra graph runs on a small synthetic layout. How does your router scale to large production networks (like Cisco's topology systems)?"*
+**Answer**: The dynamic Dijkstra engine is designed to be **completely lock-free** regardless of the size of the graph. Because edge relaxations and weather-state multiplier path costs are calculated locally within the executing goroutine's frame, different workers never mutate the shared base graph. To scale to a production topology (e.g. millions of nodes), the base graph would be loaded from an external file (e.g. OpenStreetMap database or network routing tables), while the lock-free relaxation logic remains exactly the same, ensuring linear scaling with zero contention.
 
 ---
 
