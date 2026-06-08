@@ -31,6 +31,13 @@ This repository implements a concurrent, zero-dependency Go service designed to 
 * **Adversarial weather-state Dijkstra routing**: Calculates dynamic shortest paths locally across graph hubs. Latency penalties are dynamically injected without modifying the baseline graph weights, allowing lock-free concurrent path computations.
 * **High-Throughput TCP pipeline**: Employs a single-reader, multi-worker client model that pipelines packets over persistent connections with natural TCP backpressure.
 
+### Live Metrics Endpoint
+A zero-dependency HTTP metrics API server runs alongside the ingestion 
+pipeline on port 9090. 
+
+- `GET /metrics` — returns a live JSON snapshot of all system counters
+  (packets processed, cache hit rate, injected latency, uptime, and active ingestion mode: Sequential vs Zipfian)
+
 ---
 
 ## 🏗️ Architecture Overview
@@ -130,6 +137,20 @@ The following benchmark metrics reflect the ingestion of the full **Bangalore Mo
 | **p99 Latency** | — | ~525 µs |
 
 *\*Note: Zipfian benchmark mirror cache capacity is set to 25 slots/shard (400 total capacity) against 1,140 unique geohashes, representing ~35% working set coverage.*
+
+### Zipfian Steady-State Verification
+
+Polling `/metrics` every 5 seconds during a 60s Zipfian benchmark (16 workers, skew=1.07) shows hit rate converges and holds stable:
+
+| Uptime | Packets | Hit Rate |
+|--------|---------|----------|
+| 19s    | 45,347  | 77.92%   |
+| 24s    | 55,479  | 78.10%   |
+| 29s    | 63,665  | 78.13%   |
+| 34s    | 70,810  | 78.08%   |
+| 39s    | 77,407  | 78.07%   |
+
+Hit rate variance: <0.25% — confirms stable Zipfian steady state.
 
 ### Ingestion Scaling Benchmark
 Below is an empirical analysis of telemetry ingestion throughput relative to concurrent TCP client workers. Throughput scales linearly under low worker counts and levels off near 8 concurrent workers due to cache shard mutex lock acquisition and network device limits:
@@ -312,6 +333,7 @@ This project serves as a demonstration of production-grade systems engineering i
 - [ ] **Dynamic Shard Resizing**: Dynamically adjust the number of cache shards based on real-time collision and lock contention metrics.
 - [ ] **gRPC Ingestion Path**: Introduce a gRPC/Protobuf streaming path to reduce message framing and parsing overhead compared to newline-delimited protocols.
 - [x] Persistent Cache Backing: WAL implemented with CRC32 corruption detection, crash recovery, rotation at 50MB, and full test coverage.
+- [ ] WebSocket push for real-time dashboard updates (replace polling with server-sent events)
 
 ---
 

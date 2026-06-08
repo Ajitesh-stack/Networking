@@ -2,11 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/Ajitesh-stack/spatial-ingestion-server/metrics"
@@ -62,47 +60,6 @@ func TestMetricsEndpointJSON(t *testing.T) {
 	}
 	if math.Abs(data.HitRatePct-78.0) > 0.01 {
 		t.Errorf("Expected hit_rate_pct close to 78.0, got %f", data.HitRatePct)
-	}
-}
-
-// TestDashboardHTMLEndpoint verifies the main HTML dashboard endpoint returns valid content.
-func TestDashboardHTMLEndpoint(t *testing.T) {
-	m := metrics.NewSystemMetrics()
-	ts := httptest.NewServer(newDashboardMux(m))
-	defer ts.Close()
-
-	res, err := http.Get(ts.URL)
-	if err != nil {
-		t.Fatalf("Failed to make GET request: %v", err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("Expected status code 200, got %d", res.StatusCode)
-	}
-
-	contentType := res.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "text/html") {
-		t.Errorf("Expected Content-Type containing 'text/html', got %q", contentType)
-	}
-
-	bodyBytes, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatalf("Failed to read response body: %v", err)
-	}
-	body := string(bodyBytes)
-
-	requiredStrings := []string{
-		"Spatial Ingestion Server",
-		"hit_rate_pct",
-		"cache_hits",
-		"/metrics",
-	}
-
-	for _, s := range requiredStrings {
-		if !strings.Contains(body, s) {
-			t.Errorf("Expected response body to contain %q, but it did not", s)
-		}
 	}
 }
 

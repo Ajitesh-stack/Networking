@@ -11,7 +11,7 @@ import (
 // TestDecodeGeohash validates geohash decoding correctness against expected coordinates.
 func TestDecodeGeohash(t *testing.T) {
 	tests := []struct {
-		geohash  string
+		geohash     string
 		expectedLat float64
 		expectedLon float64
 		tolerance   float64 // Acceptable variance due to bounding box centering
@@ -146,4 +146,3 @@ func TestStreamDatasetInvalidFile(t *testing.T) {
 		t.Error("expected error for non existent file, got nil")
 	}
 }
-

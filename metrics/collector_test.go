@@ -96,4 +96,3 @@ func TestSystemMetricsZeroReadsReporting(t *testing.T) {
 	m.StartReporting(20 * time.Millisecond)
 	time.Sleep(50 * time.Millisecond)
 }
-

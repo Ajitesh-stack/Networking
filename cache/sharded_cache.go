@@ -61,3 +61,15 @@ func (sc *ShardedCache) Set(key string, value interface{}) {
 
 	shard.cache.Set(key, value)
 }
+
+// SetCapacity dynamically changes the capacity of all shards in the cache.
+func (sc *ShardedCache) SetCapacity(capacity int) {
+	for _, shard := range sc.shards {
+		shard.mu.Lock()
+		shard.cache.capacity = capacity
+		for shard.cache.evictList.Len() > capacity {
+			shard.cache.evictOldest()
+		}
+		shard.mu.Unlock()
+	}
+}

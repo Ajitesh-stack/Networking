@@ -86,7 +86,8 @@ func runWorker(workerID int, serverAddr string, packetChan <-chan PacketJob, wg 
 		log.Printf("[Worker %d] Connection failed after %d attempts: %v", workerID, maxRetries, err)
 		// Drain the channel in background to prevent deadlock of the main thread reader
 		go func() {
-			for range packetChan {}
+			for range packetChan {
+			}
 		}()
 		return
 	}
@@ -100,7 +101,8 @@ func runWorker(workerID int, serverAddr string, packetChan <-chan PacketJob, wg 
 			log.Printf("[Worker %d] Failed to write packet: %v", workerID, err)
 			// Drain the channel in background to prevent deadlock of the main thread reader
 			go func() {
-				for range packetChan {}
+				for range packetChan {
+				}
 			}()
 			return
 		}
@@ -198,7 +200,7 @@ func streamDataset(filePath string, packetChan chan<- PacketJob) error {
 		}
 
 		// Format into custom TCP framing protocol string
-		packet := fmt.Sprintf("client=%s,seq=%d,lat=%s,lon=%s,weather=%s\n", geohashStr, indexVal, latStr, lonStr, weather)
+		packet := fmt.Sprintf("client=%s,seq=%d,lat=%s,lon=%s,weather=%s,mode=sequential\n", geohashStr, indexVal, latStr, lonStr, weather)
 
 		packetChan <- PacketJob{
 			Payload:       packet,

@@ -235,7 +235,7 @@ func runZipfianBenchmark(csvPath, serverAddr string, duration time.Duration, wor
 				default:
 					geohash := zg.Draw()
 					reqSeq := atomic.AddInt64(&totalRequests, 1)
-					packet := fmt.Sprintf("client=%s,seq=%d,lat=0,lon=0,weather=clear\n", geohash, reqSeq)
+					packet := fmt.Sprintf("client=%s,seq=%d,lat=0,lon=0,weather=clear,mode=zipfian\n", geohash, reqSeq)
 
 					start := time.Now()
 					_, err := writer.WriteString(packet)

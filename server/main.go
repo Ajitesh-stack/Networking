@@ -26,6 +26,12 @@ var (
 	globalGraph       *routing.Graph
 	globalMetrics     *metrics.SystemMetrics
 	globalWAL         *wal.WAL
+	activeMode        int32 // 0 = Sequential, 1 = Zipfian
+)
+
+const (
+	ModeSequential int32 = 0
+	ModeZipfian    int32 = 1
 )
 
 func main() {
@@ -154,39 +160,54 @@ func handleConnection(conn net.Conn) {
 
 		log.Printf("[%s] Received packet: %q", conn.RemoteAddr().String(), line)
 
-		// Extract client ID and weather attributes
+		// Extract client ID, weather attributes, and mode
 		clientID, okClient := extractClientID(line)
 		weather, okWeather := extractWeather(line)
+		mode, okMode := extractMode(line)
+
+		if okMode {
+			if mode == "zipfian" {
+				if atomic.CompareAndSwapInt32(&activeMode, ModeSequential, ModeZipfian) {
+					log.Println("[Server] Switching cache capacity to 25 per shard (Zipfian mode)")
+					globalCache.SetCapacity(25)
+				}
+			} else if mode == "sequential" {
+				if atomic.CompareAndSwapInt32(&activeMode, ModeZipfian, ModeSequential) {
+					log.Println("[Server] Switching cache capacity to 100 per shard (Sequential mode)")
+					globalCache.SetCapacity(100)
+				}
+			}
+		}
 
 		if okClient && okWeather {
-			// Compute shortest path and dynamic weight metrics locally (No global graph mutations)
-			path, cost, latencySleep := globalGraph.FindShortestPath("A", "E", weather)
-			log.Printf("[%s] Dijkstra path resolved for weather %q: %v with total cost %.2f", conn.RemoteAddr().String(), weather, path, cost)
-
-			// Simulate environmental transmission delay if required
-			if latencySleep > 0 {
-				scaledSleep := latencySleep / 100
-				log.Printf("[%s] Simulating adversarial link degradation: sleeping for %v (%q weather)", conn.RemoteAddr().String(), scaledSleep, weather)
-				time.Sleep(scaledSleep)
-				globalMetrics.AddInjectedLatency(latencySleep)
-			}
-
-			if err := globalWAL.Write(line); err != nil {
-				log.Printf("[WAL] Write failed for packet: %v", err)
-				// Do not insert into cache if WAL write fails (write-ahead guarantee)
-				continue
-			}
-
-			// Perform Cache operations
-			globalCache.Set(clientID, line)
-			log.Printf("[%s] Cache WRITE for key %q", conn.RemoteAddr().String(), clientID)
-
+			// Perform Cache operations using a real lookup structure
 			if val, found := globalCache.Get(clientID); found {
 				globalMetrics.IncrementCacheHits()
 				log.Printf("[%s] Cache READ hit for key %q: %q", conn.RemoteAddr().String(), clientID, val.(string))
 			} else {
 				globalMetrics.IncrementCacheMisses()
 				log.Printf("[%s] Cache READ miss for key %q", conn.RemoteAddr().String(), clientID)
+
+				// Compute shortest path and dynamic weight metrics locally on cache miss
+				path, cost, latencySleep := globalGraph.FindShortestPath("A", "E", weather)
+				log.Printf("[%s] Dijkstra path resolved for weather %q: %v with total cost %.2f", conn.RemoteAddr().String(), weather, path, cost)
+
+				// Simulate environmental transmission delay if required
+				if latencySleep > 0 {
+					scaledSleep := latencySleep / 100
+					log.Printf("[%s] Simulating adversarial link degradation: sleeping for %v (%q weather)", conn.RemoteAddr().String(), scaledSleep, weather)
+					time.Sleep(scaledSleep)
+					globalMetrics.AddInjectedLatency(latencySleep)
+				}
+
+				if err := globalWAL.Write(line); err != nil {
+					log.Printf("[WAL] Write failed for packet: %v", err)
+					// Do not insert into cache if WAL write fails (write-ahead guarantee)
+					continue
+				}
+
+				globalCache.Set(clientID, line)
+				log.Printf("[%s] Cache WRITE for key %q", conn.RemoteAddr().String(), clientID)
 			}
 		} else {
 			log.Printf("[%s] Failed to parse telemetry packet parameters: %q", conn.RemoteAddr().String(), line)
@@ -240,4 +261,28 @@ func extractWeather(packet string) (string, bool) {
 		return "", false
 	}
 	return weather, true
+}
+
+// extractMode retrieves the value of the "mode=" parameter in the telemetry packet.
+func extractMode(packet string) (string, bool) {
+	const prefix = "mode="
+	idx := strings.Index(packet, prefix)
+	if idx == -1 {
+		return "", false
+	}
+	start := idx + len(prefix)
+
+	end := strings.Index(packet[start:], ",")
+	if end == -1 {
+		end = strings.Index(packet[start:], "\n")
+		if end == -1 {
+			end = len(packet[start:])
+		}
+	}
+
+	mode := strings.TrimSpace(packet[start : start+end])
+	if mode == "" {
+		return "", false
+	}
+	return mode, true
 }
