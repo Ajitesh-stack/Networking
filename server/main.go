@@ -17,6 +17,7 @@ import (
 	"github.com/Ajitesh-stack/spatial-ingestion-server/cache"
 	"github.com/Ajitesh-stack/spatial-ingestion-server/metrics"
 	"github.com/Ajitesh-stack/spatial-ingestion-server/routing"
+	"github.com/Ajitesh-stack/spatial-ingestion-server/wal"
 )
 
 var (
@@ -24,6 +25,7 @@ var (
 	globalCache       *cache.ShardedCache
 	globalGraph       *routing.Graph
 	globalMetrics     *metrics.SystemMetrics
+	globalWAL         *wal.WAL
 )
 
 func main() {
@@ -39,6 +41,29 @@ func main() {
 	// Instantiate the static network topology graph (Read-Only under concurrency)
 	globalGraph = routing.GetTestTopology()
 	log.Println("Global Network Topology initialized (Nodes A to E)")
+
+	// WAL Recovery
+	highSeq, err := wal.Recover("wal.log", globalCache)
+	if err != nil {
+		log.Fatalf("WAL recovery failed: %v", err)
+	}
+	log.Printf("[WAL] Recovery complete. Highest sequence: %d", highSeq)
+
+	// WAL Init
+	globalWAL, err = wal.New("wal.log", 1)
+	if err != nil {
+		log.Fatalf("WAL init failed: %v", err)
+	}
+	defer globalWAL.Close()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("[Server] Shutting down...")
+		globalWAL.Close()
+		os.Exit(0)
+	}()
 
 	listener, err := net.Listen("tcp", ":8080")
 	if err != nil {
@@ -141,6 +166,12 @@ func handleConnection(conn net.Conn) {
 				log.Printf("[%s] Simulating adversarial link degradation: sleeping for %v (%q weather)", conn.RemoteAddr().String(), scaledSleep, weather)
 				time.Sleep(scaledSleep)
 				globalMetrics.AddInjectedLatency(latencySleep)
+			}
+
+			if err := globalWAL.Write(line); err != nil {
+				log.Printf("[WAL] Write failed for packet: %v", err)
+				// Do not insert into cache if WAL write fails (write-ahead guarantee)
+				continue
 			}
 
 			// Perform Cache operations

@@ -26,7 +26,16 @@ func main() {
 	flag.StringVar(&dataPath, "data", "generator/data/train.csv", "Path to raw mobility CSV dataset (e.g. generator/data/train.csv or generator/data/test.csv)")
 	var serverAddr string
 	flag.StringVar(&serverAddr, "server", "localhost:8080", "Server endpoint address (host:port)")
+	mode := flag.String("mode", "sequential", "Benchmark mode: sequential | zipfian")
+	duration := flag.Duration("duration", 60*time.Second, "Duration for zipfian benchmark")
+	workers := flag.Int("workers", 16, "Number of concurrent worker goroutines")
+	skew := flag.Float64("skew", 1.07, "Zipf skew parameter (higher = more skewed)")
 	flag.Parse()
+
+	if *mode == "zipfian" {
+		runZipfianBenchmark(dataPath, serverAddr, *duration, *workers, *skew)
+		return
+	}
 
 	numWorkers := 3
 	packetChan := make(chan PacketJob, 100)
