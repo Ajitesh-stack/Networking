@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/Ajitesh-stack/spatial-ingestion-server/cache"
 	"github.com/Ajitesh-stack/spatial-ingestion-server/metrics"
+	"github.com/Ajitesh-stack/spatial-ingestion-server/protocol"
 	"github.com/Ajitesh-stack/spatial-ingestion-server/routing"
 	"github.com/Ajitesh-stack/spatial-ingestion-server/wal"
 )
@@ -161,9 +161,9 @@ func handleConnection(conn net.Conn) {
 		log.Printf("[%s] Received packet: %q", conn.RemoteAddr().String(), line)
 
 		// Extract client ID, weather attributes, and mode
-		clientID, okClient := extractClientID(line)
-		weather, okWeather := extractWeather(line)
-		mode, okMode := extractMode(line)
+		clientID, okClient := protocol.ExtractClientID(line)
+		weather, okWeather := protocol.ExtractWeather(line)
+		mode, okMode := protocol.ExtractMode(line)
 
 		if okMode {
 			if mode == "zipfian" {
@@ -215,74 +215,3 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-// extractClientID retrieves the value of the "client=" parameter in the telemetry packet.
-func extractClientID(packet string) (string, bool) {
-	const prefix = "client="
-	idx := strings.Index(packet, prefix)
-	if idx == -1 {
-		return "", false
-	}
-	start := idx + len(prefix)
-
-	end := strings.Index(packet[start:], ",")
-	if end == -1 {
-		end = strings.Index(packet[start:], "\n")
-		if end == -1 {
-			end = len(packet[start:])
-		}
-	}
-
-	clientID := strings.TrimSpace(packet[start : start+end])
-	if clientID == "" {
-		return "", false
-	}
-	return clientID, true
-}
-
-// extractWeather retrieves the value of the "weather=" parameter in the telemetry packet.
-func extractWeather(packet string) (string, bool) {
-	const prefix = "weather="
-	idx := strings.Index(packet, prefix)
-	if idx == -1 {
-		return "", false
-	}
-	start := idx + len(prefix)
-
-	end := strings.Index(packet[start:], ",")
-	if end == -1 {
-		end = strings.Index(packet[start:], "\n")
-		if end == -1 {
-			end = len(packet[start:])
-		}
-	}
-
-	weather := strings.TrimSpace(packet[start : start+end])
-	if weather == "" {
-		return "", false
-	}
-	return weather, true
-}
-
-// extractMode retrieves the value of the "mode=" parameter in the telemetry packet.
-func extractMode(packet string) (string, bool) {
-	const prefix = "mode="
-	idx := strings.Index(packet, prefix)
-	if idx == -1 {
-		return "", false
-	}
-	start := idx + len(prefix)
-
-	end := strings.Index(packet[start:], ",")
-	if end == -1 {
-		end = strings.Index(packet[start:], "\n")
-		if end == -1 {
-			end = len(packet[start:])
-		}
-	}
-
-	mode := strings.TrimSpace(packet[start : start+end])
-	if mode == "" {
-		return "", false
-	}
-	return mode, true
-}

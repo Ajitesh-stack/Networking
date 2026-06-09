@@ -53,12 +53,13 @@ func TestBasicAppendAndRecover(t *testing.T) {
 		t.Errorf("Expected sequence 5, got %d", seq)
 	}
 
-	for _, p := range payloads {
-		val, found := sc.Get(p)
+	clients := []string{"abc", "def", "ghi", "jkl", "mno"}
+	for i, client := range clients {
+		val, found := sc.Get(client)
 		if !found {
-			t.Errorf("Expected payload %q to be in cache", p)
-		} else if val.(string) != p {
-			t.Errorf("Expected cached value to be %q, got %q", p, val)
+			t.Errorf("Expected client %q to be in cache", client)
+		} else if val.(string) != payloads[i] {
+			t.Errorf("Expected cached value to be %q, got %q", payloads[i], val)
 		}
 	}
 }
@@ -67,9 +68,9 @@ func TestCrashRecovery(t *testing.T) {
 	w, path := makeWAL(t)
 
 	payloads := []string{
-		"packet-1",
-		"packet-2",
-		"packet-3",
+		"client=client1,seq=1,lat=12.9,lon=77.6,weather=clear",
+		"client=client2,seq=2,lat=12.9,lon=77.6,weather=rainy",
+		"client=client3,seq=3,lat=12.9,lon=77.6,weather=clear",
 	}
 
 	for _, p := range payloads {
@@ -104,12 +105,13 @@ func TestCrashRecovery(t *testing.T) {
 		t.Errorf("Expected sequence 3, got %d", seq)
 	}
 
-	for _, p := range payloads {
-		val, found := sc.Get(p)
+	clients := []string{"client1", "client2", "client3"}
+	for i, client := range clients {
+		val, found := sc.Get(client)
 		if !found {
-			t.Errorf("Expected payload %q to be in cache", p)
-		} else if val.(string) != p {
-			t.Errorf("Expected cached value to be %q, got %q", p, val)
+			t.Errorf("Expected client %q to be in cache", client)
+		} else if val.(string) != payloads[i] {
+			t.Errorf("Expected cached value to be %q, got %q", payloads[i], val)
 		}
 	}
 }
@@ -117,9 +119,9 @@ func TestCrashRecovery(t *testing.T) {
 func TestCRCMismatchDetection(t *testing.T) {
 	w, path := makeWAL(t)
 
-	p1 := "good-packet-1"
-	p2 := "corrupt-me"
-	p3 := "good-packet-3"
+	p1 := "client=client1,seq=1,lat=12.9,lon=77.6,weather=clear"
+	p2 := "client=client2,seq=2,lat=12.9,lon=77.6,weather=clear"
+	p3 := "client=client3,seq=3,lat=12.9,lon=77.6,weather=clear"
 
 	if err := w.Write(p1); err != nil {
 		t.Fatalf("Write failed: %v", err)
@@ -136,9 +138,9 @@ func TestCRCMismatchDetection(t *testing.T) {
 	}
 
 	// Open wal.log, seek to the payload of the second entry
-	// First entry = 16 header + 13 payload = 29 bytes.
-	// Second entry starts at 29. Header is 16 bytes.
-	// So second entry's payload starts at 29 + 16 = 45.
+	// First entry = 16 header + 52 payload = 68 bytes.
+	// Second entry starts at 68. Header is 16 bytes.
+	// So second entry's payload starts at 68 + 16 = 84.
 	f, err := os.OpenFile(path, os.O_RDWR, 0644)
 	if err != nil {
 		t.Fatalf("Failed to open file for random-access write: %v", err)
@@ -168,23 +170,22 @@ func TestCRCMismatchDetection(t *testing.T) {
 		t.Errorf("Expected sequence 3, got %d", seq)
 	}
 
-	// "good-packet-1" must be in cache
-	if _, found := sc.Get(p1); !found {
-		t.Errorf("Expected %q to be in cache", p1)
+	// "client1" must be in cache
+	if _, found := sc.Get("client1"); !found {
+		t.Errorf("Expected client1 to be in cache")
 	}
 
-	// "corrupt-me" must NOT be in cache
-	if _, found := sc.Get(p2); found {
-		t.Errorf("Expected %q NOT to be in cache", p2)
+	// "client2" must NOT be in cache (due to checksum mismatch)
+	if _, found := sc.Get("client2"); found {
+		t.Errorf("Expected client2 NOT to be in cache")
 	}
 
-	// "good-packet-3" must be in cache
-	if _, found := sc.Get(p3); !found {
-		t.Errorf("Expected %q to be in cache", p3)
+	// "client3" must be in cache
+	if _, found := sc.Get("client3"); !found {
+		t.Errorf("Expected client3 to be in cache")
 	}
 }
 
-// Run with: go test -race ./wal/...
 func TestConcurrentWrites(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "wal.log")
@@ -202,7 +203,7 @@ func TestConcurrentWrites(t *testing.T) {
 		go func(workerID int) {
 			defer wg.Done()
 			for j := 0; j < numWrites; j++ {
-				payload := fmt.Sprintf("worker-%d-write-%d", workerID, j)
+				payload := fmt.Sprintf("client=worker-%d-write-%d,seq=1,lat=0,lon=0,weather=clear", workerID, j)
 				if err := w.Write(payload); err != nil {
 					t.Errorf("Write failed: %v", err)
 				}
@@ -225,15 +226,67 @@ func TestConcurrentWrites(t *testing.T) {
 		t.Errorf("Expected highest sequence to be 800, got %d", seq)
 	}
 
-	// Verify all 800 unique entries are present in the cache
+	// Verify all 800 unique entries are present in the cache under clientID key
 	for i := 0; i < numGoroutines; i++ {
 		for j := 0; j < numWrites; j++ {
-			payload := fmt.Sprintf("worker-%d-write-%d", i, j)
-			_, found := sc.Get(payload)
+			clientID := fmt.Sprintf("worker-%d-write-%d", i, j)
+			_, found := sc.Get(clientID)
 			if !found {
-				t.Errorf("Expected payload %q to be in cache", payload)
+				t.Errorf("Expected clientID %q to be in cache", clientID)
 			}
 		}
+	}
+}
+
+func TestRecoverMalformedPackets(t *testing.T) {
+	w, path := makeWAL(t)
+
+	p1 := "client=client1,seq=1,lat=12.9,lon=77.6,weather=clear"
+	p2 := "malformed-packet-missing-client-id"
+	p3 := "client=client3,seq=3,lat=12.9,lon=77.6,weather=clear"
+
+	if err := w.Write(p1); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	if err := w.Write(p2); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	if err := w.Write(p3); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	sc := cache.NewShardedCache(16, 100)
+	seq, err := wal.Recover(path, sc)
+	if err != nil {
+		t.Fatalf("Recover failed: %v", err)
+	}
+
+	// The third entry should still be replayed, so highest sequence should be 3
+	if seq != 3 {
+		t.Errorf("Expected sequence 3, got %d", seq)
+	}
+
+	// "client1" must be in cache
+	if val, found := sc.Get("client1"); !found {
+		t.Errorf("Expected client1 to be in cache")
+	} else if val.(string) != p1 {
+		t.Errorf("Expected cached value %q, got %q", p1, val)
+	}
+
+	// "client3" must be in cache
+	if val, found := sc.Get("client3"); !found {
+		t.Errorf("Expected client3 to be in cache")
+	} else if val.(string) != p3 {
+		t.Errorf("Expected cached value %q, got %q", p3, val)
+	}
+
+	// Malformed payload must NOT be in cache
+	if _, found := sc.Get("malformed-packet-missing-client-id"); found {
+		t.Errorf("Expected malformed-packet-missing-client-id NOT to be in cache")
 	}
 }
 

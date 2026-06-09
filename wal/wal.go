@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/Ajitesh-stack/spatial-ingestion-server/cache"
+	"github.com/Ajitesh-stack/spatial-ingestion-server/protocol"
 )
 
 // WAL manages append-only logging of telemetry payloads to a log file on disk.
@@ -268,9 +269,14 @@ func recoverFile(path string, sc *cache.ShardedCache) (uint64, error) {
 			continue
 		}
 
-		// h. If valid: call sc.Set(payload, payload) to replay into cache
+		// h. If valid: call protocol.ExtractClientID to extract client ID and replay into cache
 		payloadStr := string(payloadBytes)
-		sc.Set(payloadStr, payloadStr)
+		clientID, ok := protocol.ExtractClientID(payloadStr)
+		if !ok {
+			log.Printf("WAL Recovery Warning: Malformed packet in log with sequence number %d. Missing or invalid clientID: %q", seq, payloadStr)
+			continue
+		}
+		sc.Set(clientID, payloadStr)
 
 		if seq > highestSequence {
 			highestSequence = seq

@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/Ajitesh-stack/spatial-ingestion-server/protocol"
 )
 
 // TestExtractClientID validates client ID parsing under various packet formats and edge cases.
@@ -64,7 +66,7 @@ func TestExtractClientID(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			id, ok := extractClientID(tc.packet)
+			id, ok := protocol.ExtractClientID(tc.packet)
 			if ok != tc.expectedOk {
 				t.Errorf("expected ok=%v, got %v", tc.expectedOk, ok)
 			}
@@ -123,7 +125,7 @@ func TestExtractWeather(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			w, ok := extractWeather(tc.packet)
+			w, ok := protocol.ExtractWeather(tc.packet)
 			if ok != tc.expectedOk {
 				t.Errorf("expected ok=%v, got %v", tc.expectedOk, ok)
 			}
